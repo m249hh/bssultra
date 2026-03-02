@@ -170,7 +170,7 @@ end)
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/Library.lua"))()
 
-local Window = Library:CreateWindow("BSS Ultra", {
+local Window = Library:CreateWindow("BSS Script", {
 	"rbxassetid://104032410076701", 0,
 })
 
@@ -217,4 +217,5 @@ end)
 
 local Tab3 = Window:AddTab("Info")
 Tab3:AddLabel("Made By m249")
+
 
