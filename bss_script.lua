@@ -195,9 +195,9 @@ Tab2:AddButton("Teleport to Hive Hub", function()
 	martinsugar4k.Value = false
 	pcall(function()
 		if queue_on_teleport then
-			queue_on_teleport([[loadstring(game:HttpGet("https://pastebin.com/raw/wb10pn5S"))()]])
+			queue_on_teleport([[loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/bss_script.lua"))()]])
 		elseif syn and syn.queue_on_teleport then
-			syn.queue_on_teleport([[loadstring(game:HttpGet("https://pastebin.com/raw/wb10pn5S"))()]])
+			syn.queue_on_teleport([[loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/bss_script.lua"))()]])
 		end
 	end)
 	TeleportService:Teleport(15579077077, player)
@@ -207,7 +207,7 @@ Tab2:AddButton("Reload Script", function()
 	martinsugar2k.Value = false
 	martinsugar4k.Value = false
 	pcall(function()
-		loadstring(game:HttpGet("https://pastebin.com/raw/wb10pn5S"))()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/bss_script.lua"))()
 	end)
 end)
 
