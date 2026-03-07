@@ -617,14 +617,34 @@ Tab1:AddToggle("Teleport Sticker Collector", false, function(state)
 	martinsugar6k.Value = state
 end)
 
+Tab1:AddToggle("Ability Tokens", false, function(state)
+	abilityTokenEnabled.Value = state
+end)
+
 Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
 	destroyPermTokens()
 end)
 
-local Tab4 = Window:AddTab("Ability Tokens")
+local TabBattle = Window:AddTab("Battle")
 
-Tab4:AddToggle("Ability Tokens", false, function(state)
-	abilityTokenEnabled.Value = state
+TabBattle:AddButton("Ladybugs", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Rhino Beetles", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Mantises", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Spider", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Werewolf", function()
+	-- TODO
 end)
 
 local Tab2 = Window:AddTab("Misc")
@@ -656,25 +676,3 @@ end)
 
 local Tab3 = Window:AddTab("Info")
 Tab3:AddLabel("Made By m249")
-
-local TabBattle = Window:AddTab("Battle")
-
-TabBattle:AddButton("Ladybugs", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Rhino Beetles", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Mantises", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Spider", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Werewolf", function()
-	-- TODO
-end)
