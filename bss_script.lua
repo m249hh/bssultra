@@ -17,10 +17,12 @@ local running = true
 -- Called to fully stop this instance
 local function unload()
 	running = false
-	if _G.BSSLibrary then
-		pcall(function() _G.BSSLibrary:Destroy() end)
-		_G.BSSLibrary = nil
+	-- Destroy the actual ScreenGui
+	local oldGui = game.Players.LocalPlayer.PlayerGui:FindFirstChild("UILibrary")
+	if oldGui then
+		oldGui:Destroy()
 	end
+	_G.BSSLibrary = nil
 	-- Reset all toggle values
 	local function clearVal(name)
 		local v = player:FindFirstChild(name)
@@ -30,6 +32,7 @@ local function unload()
 	clearVal("AutoStealSticker")
 	clearVal("TeleportSticker")
 	clearVal("AbilityTokens")
+	clearVal("BloomCollector")
 end
 _G.BSSUnload = unload
 
@@ -355,6 +358,14 @@ if not abilityTokenEnabled then
 	abilityTokenEnabled.Parent = player
 end
 
+local bloomCollectorEnabled = player:FindFirstChild("BloomCollector")
+if not bloomCollectorEnabled then
+	bloomCollectorEnabled = Instance.new("BoolValue")
+	bloomCollectorEnabled.Name = "BloomCollector"
+	bloomCollectorEnabled.Value = false
+	bloomCollectorEnabled.Parent = player
+end
+
 local function destroyPermTokens()
 	tokenFolder:ClearAllChildren()
 end
@@ -578,6 +589,156 @@ task.spawn(function()
 	end
 end)
 
+local function FindNearestPetal()
+	local nearest, minDist = nil, math.huge
+	local rpPos = rootPart.Position
+	for _, v in ipairs(particlesFolder:GetChildren()) do
+		if v:IsA("BasePart") and v.Name == "PetalPart" then
+			if not v:FindFirstChild("isTouched") then
+				local dist = (rpPos - v.Position).Magnitude
+				if dist < minDist then
+					minDist = dist
+					nearest = v
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local function TeleportToPetal(petal)
+	if not petal or not rootPart then return end
+	if humanoid and humanoid.Health <= 0 then return end
+	rootPart.CFrame = CFrame.new(petal.Position + Vector3.new(0, 3, 0))
+end
+
+task.spawn(function()
+	while running and task.wait(0.05) do
+		if bloomCollectorEnabled.Value and rootPart then
+			local petal = FindNearestPetal()
+			if petal then
+				pcall(function() TeleportToPetal(petal) end)
+			end
+		end
+	end
+end)
+
+-- Battle system
+local BATTLE_CONFIGS = {
+	Ladybugs = {
+		spawns = {
+			Vector3.new(-181.82994079589844, 20.096317291259766, -14.618168830871582),
+			Vector3.new(-87.85354614257812, 4.095474720001221, 117.71167755126953),
+			Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156),
+		},
+		enemyName = "Ladybug",
+	},
+	RhinoBeetles = {
+		spawns = {
+			Vector3.new(154.2476348876953, 4.095475196838379, 96.91366577148438),
+			Vector3.new(135.10894775390625, 20.0963191986084, -28.017919540405273),
+			Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656),
+			Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156),
+		},
+		enemyName = "Rhino Beetle",
+	},
+	Mantises = {
+		spawns = {
+			Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656),
+			Vector3.new(-331.1097717285156, 68.0963134765625, -189.36790466308594),
+		},
+		enemyName = "Mantis",
+	},
+	Spider = {
+		spawns = {
+			Vector3.new(-42.57848358154297, 20.0963191986084, -6.322513103485107),
+		},
+		enemyName = "Spider",
+	},
+	Werewolf = {
+		spawns = {
+			Vector3.new(-189.23330688476562, 68.0963134765625, -146.06748962402344),
+		},
+		enemyName = "Werewolf",
+	},
+	Scorpion = {
+		spawns = {
+			Vector3.new(-334, 18.305, 122),
+		},
+		enemyName = "Scorpion",
+	},
+}
+
+local battleToggles = {}
+for k, _ in pairs(BATTLE_CONFIGS) do
+	battleToggles[k] = false
+end
+
+local ORBIT_RADIUS = 25
+local ORBIT_SPEED = 5 -- radians per second
+local monstersFolder = workspace:FindFirstChild("Monsters")
+
+local function findEnemy(name)
+	local folder = workspace:FindFirstChild("Monsters")
+	if not folder then return nil end
+	for _, v in ipairs(folder:GetChildren()) do
+		if v.Name:lower():find(name:lower()) then
+			local part = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart")
+			local hum = v:FindFirstChildOfClass("Humanoid")
+			if part and hum and hum.Health > 0 then
+				return v, part
+			end
+		end
+	end
+	return nil
+end
+
+local function runBattle(configKey)
+	local config = BATTLE_CONFIGS[configKey]
+	local spawnIndex = 1
+	local angle = 0
+	local lastTime = tick()
+	local enemyFoundTime = nil
+
+	while running and battleToggles[configKey] do
+		local now = tick()
+		local dt = now - lastTime
+		lastTime = now
+
+		local enemy, enemyPart = findEnemy(config.enemyName)
+
+		if enemy and enemyPart then
+			if not enemyFoundTime then
+				enemyFoundTime = tick()
+			end
+			if tick() - enemyFoundTime < 1 then
+				task.wait(0.05)
+				continue
+			end
+			-- Orbit around the enemy
+			angle = angle + ORBIT_SPEED * dt
+			local targetPos = enemyPart.Position + Vector3.new(
+				math.cos(angle) * ORBIT_RADIUS,
+				3,
+				math.sin(angle) * ORBIT_RADIUS
+			)
+			if rootPart then
+				rootPart.CFrame = CFrame.new(targetPos, enemyPart.Position)
+			end
+		else
+			enemyFoundTime = nil
+			-- No enemy found, teleport to next spawn
+			if rootPart then
+				local spawnPos = config.spawns[spawnIndex]
+				rootPart.CFrame = CFrame.new(spawnPos + Vector3.new(0, 3, 0))
+				spawnIndex = spawnIndex % #config.spawns + 1
+			end
+		end
+
+		task.wait(0.05)
+	end
+end
+
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/Library.lua"))()
 
 _G.BSSLibrary = Library
@@ -586,20 +747,32 @@ local Window = Library:CreateWindow("BSS Script", {
 	"rbxassetid://104032410076701", 0,
 })
 
--- Patch scrollbar color to dark on all current and future ScrollingFrames in the UI
-task.defer(function()
+-- Resize window 25% larger and fix scrollbar color
+task.spawn(function()
+	task.wait(0.2)
 	local gui = game.Players.LocalPlayer.PlayerGui:FindFirstChild("UILibrary")
 	if gui then
 		for _, v in ipairs(gui:GetDescendants()) do
-			if v:IsA("ScrollingFrame") then
-				v.ScrollBarImageColor3 = Color3.fromRGB(10, 10, 10)
+			if v:IsA("Frame") and v.Name == "MainFrame" or (v:IsA("Frame") and v.Parent == gui) then
+				v.Size = UDim2.fromOffset(375, 375)
+				break
 			end
 		end
-		gui.DescendantAdded:Connect(function(v)
+		-- fallback: resize first top-level Frame
+		local mainFrame = gui:FindFirstChildWhichIsA("Frame")
+		if mainFrame then
+			mainFrame.Size = UDim2.fromOffset(375, 375)
+		end
+		local function fixScrollbar(v)
 			if v:IsA("ScrollingFrame") then
-				v.ScrollBarImageColor3 = Color3.fromRGB(10, 10, 10)
+				v.ScrollBarImageColor3 = Color3.fromRGB(8, 8, 8)
+				v.ScrollBarThickness = 4
 			end
-		end)
+		end
+		for _, v in ipairs(gui:GetDescendants()) do
+			fixScrollbar(v)
+		end
+		gui.DescendantAdded:Connect(fixScrollbar)
 	end
 end)
 
@@ -625,27 +798,29 @@ Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
 	destroyPermTokens()
 end)
 
+local TabBlooms = Window:AddTab("Blooms")
+
+TabBlooms:AddToggle("Bloom Collector", false, function(state)
+	bloomCollectorEnabled.Value = state
+end)
+
 local TabBattle = Window:AddTab("Battle")
 
-TabBattle:AddButton("Ladybugs", function()
-	-- TODO
-end)
+local function makeBattleToggle(label, configKey)
+	TabBattle:AddToggle(label, false, function(state)
+		battleToggles[configKey] = state
+		if state then
+			task.spawn(function() runBattle(configKey) end)
+		end
+	end)
+end
 
-TabBattle:AddButton("Rhino Beetles", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Mantises", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Spider", function()
-	-- TODO
-end)
-
-TabBattle:AddButton("Werewolf", function()
-	-- TODO
-end)
+makeBattleToggle("Ladybugs", "Ladybugs")
+makeBattleToggle("Rhino Beetles", "RhinoBeetles")
+makeBattleToggle("Mantises", "Mantises")
+makeBattleToggle("Spider", "Spider")
+makeBattleToggle("Werewolf", "Werewolf")
+makeBattleToggle("Scorpion", "Scorpion")
 
 local Tab2 = Window:AddTab("Misc")
 
