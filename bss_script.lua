@@ -1,3 +1,8 @@
+-- Unload previous instance if already running
+if _G.BSSUnload then
+	pcall(_G.BSSUnload)
+end
+
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
@@ -7,6 +12,26 @@ local particlesFolder = workspace:WaitForChild("Particles")
 
 local rootPart
 local MOVE_SPEED = 75
+local running = true
+
+-- Called to fully stop this instance
+local function unload()
+	running = false
+	if _G.BSSLibrary then
+		pcall(function() _G.BSSLibrary:Destroy() end)
+		_G.BSSLibrary = nil
+	end
+	-- Reset all toggle values
+	local function clearVal(name)
+		local v = player:FindFirstChild(name)
+		if v then v.Value = false end
+	end
+	clearVal("AutoSteal")
+	clearVal("AutoStealSticker")
+	clearVal("TeleportSticker")
+	clearVal("AbilityTokens")
+end
+_G.BSSUnload = unload
 
 local STICKER_IDS = {
 	["rbxassetid://1873723985"] = true,
@@ -278,6 +303,19 @@ local STICKER_IDS = {
 	["rbxassetid://17845772962"] = true,
 }
 
+local ABILITY_IDS = {
+	["rbxassetid://2499514197"] = true,
+	["rbxassetid://2499540966"] = true,
+	["rbxassetid://1442725244"] = true,
+	["rbxassetid://1442764904"] = true,
+	["rbxassetid://1442859163"] = true,
+	["rbxassetid://1442863423"] = true,
+	["rbxassetid://1629649299"] = true,
+	["rbxassetid://65867881"] = true,
+	["rbxassetid://1629547638"] = true,
+	["rbxassetid://1839454544"] = true,
+}
+
 local function cacheRoot()
 	local char = player.Character or player.CharacterAdded:Wait()
 	rootPart = char:WaitForChild("HumanoidRootPart")
@@ -309,6 +347,14 @@ if not martinsugar6k then
 	martinsugar6k.Parent = player
 end
 
+local abilityTokenEnabled = player:FindFirstChild("AbilityTokens")
+if not abilityTokenEnabled then
+	abilityTokenEnabled = Instance.new("BoolValue")
+	abilityTokenEnabled.Name = "AbilityTokens"
+	abilityTokenEnabled.Value = false
+	abilityTokenEnabled.Parent = player
+end
+
 local function destroyPermTokens()
 	tokenFolder:ClearAllChildren()
 end
@@ -337,7 +383,6 @@ end
 cacheCharacter()
 player.CharacterAdded:Connect(cacheCharacter)
 
--- Check if a part in Collectibles has a Decal with a sticker ID
 local function isStickerToken(part)
 	for _, child in ipairs(part:GetChildren()) do
 		if child:IsA("Decal") and STICKER_IDS[child.Texture] then
@@ -347,35 +392,13 @@ local function isStickerToken(part)
 	return false
 end
 
--- Find the nearest sticker token in Collectibles by decal ID
-local function FindNearestStickerToken()
-	local nearest, minDist = nil, math.huge
-	local rpPos = rootPart.Position
-	for _, v in ipairs(tokenFolder:GetChildren()) do
-		if v:IsA("BasePart") and v:IsDescendantOf(workspace) and isStickerToken(v) then
-			if not v:FindFirstChild("isTouched") then
-				local dist = (rpPos - v.Position).Magnitude
-				if dist < minDist then
-					minDist = dist
-					nearest = v
-				end
-			end
+local function isAbilityToken(part)
+	for _, child in ipairs(part:GetChildren()) do
+		if child:IsA("Decal") and ABILITY_IDS[child.Texture] then
+			return true
 		end
 	end
-	return nearest
-end
-
--- Teleport directly to the sticker token's position
-local function TeleportToSticker(stickerToken)
-	if not stickerToken or not rootPart then return end
-	if humanoid and humanoid.Health <= 0 then return end
-	rootPart.CFrame = CFrame.new(stickerToken.Position + Vector3.new(0, 3, 0))
-	task.wait(0.1)
-	if stickerToken and stickerToken.Parent then
-		if not stickerToken:FindFirstChild("isTouched") then
-			stickerToken:Destroy()
-		end
-	end
+	return false
 end
 
 local function moveToToken(token)
@@ -431,6 +454,18 @@ local function moveToSticker(StickerGlob)
 	end
 end
 
+local function TeleportToSticker(stickerToken)
+	if not stickerToken or not rootPart then return end
+	if humanoid and humanoid.Health <= 0 then return end
+	rootPart.CFrame = CFrame.new(stickerToken.Position + Vector3.new(0, 3, 0))
+	task.wait(0.1)
+	if stickerToken and stickerToken.Parent then
+		if not stickerToken:FindFirstChild("isTouched") then
+			stickerToken:Destroy()
+		end
+	end
+end
+
 local function FindNearestSticker()
 	local nearest, minDist = nil, math.huge
 	local rpPos = rootPart.Position
@@ -465,8 +500,42 @@ local function FindNearestToken()
 	return nearest
 end
 
+local function FindNearestStickerToken()
+	local nearest, minDist = nil, math.huge
+	local rpPos = rootPart.Position
+	for _, v in ipairs(tokenFolder:GetChildren()) do
+		if v:IsA("BasePart") and v:IsDescendantOf(workspace) and isStickerToken(v) then
+			if not v:FindFirstChild("isTouched") then
+				local dist = (rpPos - v.Position).Magnitude
+				if dist < minDist then
+					minDist = dist
+					nearest = v
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local function FindNearestAbilityToken()
+	local nearest, minDist = nil, math.huge
+	local rpPos = rootPart.Position
+	for _, v in ipairs(tokenFolder:GetChildren()) do
+		if v:IsA("BasePart") and v:IsDescendantOf(workspace) and isAbilityToken(v) then
+			if not v:FindFirstChild("isTouched") then
+				local dist = (rpPos - v.Position).Magnitude
+				if dist < minDist then
+					minDist = dist
+					nearest = v
+				end
+			end
+		end
+	end
+	return nearest
+end
+
 task.spawn(function()
-	while task.wait(0.05) do
+	while running and task.wait(0.05) do
 		if martinsugar2k.Value and rootPart then
 			local token = FindNearestToken()
 			if token and isAliveToken(token) then
@@ -477,7 +546,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-	while task.wait(0.05) do
+	while running and task.wait(0.05) do
 		if martinsugar4k.Value and rootPart then
 			local StickerGlob = FindNearestSticker()
 			if StickerGlob then
@@ -487,9 +556,8 @@ task.spawn(function()
 	end
 end)
 
--- TeleportSticker loop: scan Collectibles for decal-matched sticker tokens
 task.spawn(function()
-	while task.wait(0.05) do
+	while running and task.wait(0.05) do
 		if martinsugar6k.Value and rootPart then
 			local stickerToken = FindNearestStickerToken()
 			if stickerToken then
@@ -499,7 +567,19 @@ task.spawn(function()
 	end
 end)
 
+task.spawn(function()
+	while running and task.wait(0.05) do
+		if abilityTokenEnabled.Value and rootPart then
+			local abilityToken = FindNearestAbilityToken()
+			if abilityToken and abilityToken:IsDescendantOf(workspace) then
+				pcall(function() moveToToken(abilityToken) end)
+			end
+		end
+	end
+end)
+
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/Library.lua"))()
+_G.BSSLibrary = Library
 
 local Window = Library:CreateWindow("BSS Script", {
 	"rbxassetid://104032410076701", 0,
@@ -523,12 +603,19 @@ Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
 	destroyPermTokens()
 end)
 
+local Tab4 = Window:AddTab("Ability Tokens")
+
+Tab4:AddToggle("Ability Tokens", false, function(state)
+	abilityTokenEnabled.Value = state
+end)
+
 local Tab2 = Window:AddTab("Misc")
 
 Tab2:AddButton("Teleport to Hive Hub", function()
 	martinsugar2k.Value = false
 	martinsugar4k.Value = false
 	martinsugar6k.Value = false
+	abilityTokenEnabled.Value = false
 	pcall(function()
 		if queue_on_teleport then
 			queue_on_teleport([[loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/bss_script.lua"))()]])
@@ -540,9 +627,6 @@ Tab2:AddButton("Teleport to Hive Hub", function()
 end)
 
 Tab2:AddButton("Reload Script", function()
-	martinsugar2k.Value = false
-	martinsugar4k.Value = false
-	martinsugar6k.Value = false
 	pcall(function()
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/bss_script.lua"))()
 	end)
