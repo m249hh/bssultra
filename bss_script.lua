@@ -579,11 +579,29 @@ task.spawn(function()
 end)
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/Library.lua"))()
+
 _G.BSSLibrary = Library
 
 local Window = Library:CreateWindow("BSS Script", {
 	"rbxassetid://104032410076701", 0,
 })
+
+-- Patch scrollbar color to dark on all current and future ScrollingFrames in the UI
+task.defer(function()
+	local gui = game.Players.LocalPlayer.PlayerGui:FindFirstChild("UILibrary")
+	if gui then
+		for _, v in ipairs(gui:GetDescendants()) do
+			if v:IsA("ScrollingFrame") then
+				v.ScrollBarImageColor3 = Color3.fromRGB(10, 10, 10)
+			end
+		end
+		gui.DescendantAdded:Connect(function(v)
+			if v:IsA("ScrollingFrame") then
+				v.ScrollBarImageColor3 = Color3.fromRGB(10, 10, 10)
+			end
+		end)
+	end
+end)
 
 local Tab1 = Window:AddTab("Token")
 
@@ -599,12 +617,14 @@ Tab1:AddToggle("Teleport Sticker Collector", false, function(state)
 	martinsugar6k.Value = state
 end)
 
-Tab1:AddToggle("Ability Tokens", false, function(state)
-	abilityTokenEnabled.Value = state
-end)
-
 Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
 	destroyPermTokens()
+end)
+
+local Tab4 = Window:AddTab("Ability Tokens")
+
+Tab4:AddToggle("Ability Tokens", false, function(state)
+	abilityTokenEnabled.Value = state
 end)
 
 local Tab2 = Window:AddTab("Misc")
@@ -636,3 +656,25 @@ end)
 
 local Tab3 = Window:AddTab("Info")
 Tab3:AddLabel("Made By m249")
+
+local TabBattle = Window:AddTab("Battle")
+
+TabBattle:AddButton("Ladybugs", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Rhino Beetles", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Mantises", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Spider", function()
+	-- TODO
+end)
+
+TabBattle:AddButton("Werewolf", function()
+	-- TODO
+end)
