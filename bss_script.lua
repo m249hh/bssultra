@@ -592,14 +592,25 @@ end)
 local function FindNearestPetal()
 	local nearest, minDist = nil, math.huge
 	local rpPos = rootPart.Position
-	for _, v in ipairs(particlesFolder:GetChildren()) do
+	-- Check direct children first (BaseParts named PetalPart)
+	-- Also check inside Models for a PetalPart BasePart
+	local function checkPart(v)
 		if v:IsA("BasePart") and v.Name == "PetalPart" then
-			if not v:FindFirstChild("isTouched") then
+			if not v:FindFirstChild("isTouched") and not v:FindFirstChild("Collected") then
 				local dist = (rpPos - v.Position).Magnitude
 				if dist < minDist then
 					minDist = dist
 					nearest = v
 				end
+			end
+		end
+	end
+	for _, v in ipairs(particlesFolder:GetChildren()) do
+		if v:IsA("BasePart") then
+			checkPart(v)
+		elseif v:IsA("Model") then
+			for _, child in ipairs(v:GetDescendants()) do
+				checkPart(child)
 			end
 		end
 	end
@@ -609,7 +620,12 @@ end
 local function TeleportToPetal(petal)
 	if not petal or not rootPart then return end
 	if humanoid and humanoid.Health <= 0 then return end
-	rootPart.CFrame = CFrame.new(petal.Position + Vector3.new(0, 3, 0))
+	-- Use the actual BasePart position, not any model center
+	local pos = petal.Position
+	rootPart.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+	local tag = Instance.new("BoolValue")
+	tag.Name = "Collected"
+	tag.Parent = petal
 end
 
 task.spawn(function()
@@ -625,97 +641,95 @@ end)
 
 -- Battle system
 local BATTLE_CONFIGS = {
-	Ladybugs = {
-		spawns = {
-			Vector3.new(-181.82994079589844, 20.096317291259766, -14.618168830871582),
-			Vector3.new(-87.85354614257812, 4.095474720001221, 117.71167755126953),
-			Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156),
-		},
-		enemyName = "Ladybug",
-	},
-	RhinoBeetles = {
-		spawns = {
-			Vector3.new(154.2476348876953, 4.095475196838379, 96.91366577148438),
-			Vector3.new(135.10894775390625, 20.0963191986084, -28.017919540405273),
-			Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656),
-			Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156),
-		},
-		enemyName = "Rhino Beetle",
-	},
-	Mantises = {
-		spawns = {
-			Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656),
-			Vector3.new(-331.1097717285156, 68.0963134765625, -189.36790466308594),
-		},
-		enemyName = "Mantis",
-	},
-	Spider = {
-		spawns = {
-			Vector3.new(-42.57848358154297, 20.0963191986084, -6.322513103485107),
-		},
-		enemyName = "Spider",
-	},
-	Werewolf = {
-		spawns = {
-			Vector3.new(-189.23330688476562, 68.0963134765625, -146.06748962402344),
-		},
-		enemyName = "Werewolf",
-	},
-	Scorpion = {
-		spawns = {
-			Vector3.new(-334, 18.305, 122),
-		},
-		enemyName = "Scorpion",
-	},
+	Ladybugs     = { spawns = { Vector3.new(-181.82994079589844, 20.096317291259766, -14.618168830871582), Vector3.new(-87.85354614257812, 4.095474720001221, 117.71167755126953), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Ladybug",     respawnTime = 300  },
+	RhinoBeetles = { spawns = { Vector3.new(154.2476348876953, 4.095475196838379, 96.91366577148438), Vector3.new(135.10894775390625, 20.0963191986084, -28.017919540405273), Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Rhino Beetle", respawnTime = 300  },
+	Mantises     = { spawns = { Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(-331.1097717285156, 68.0963134765625, -189.36790466308594) }, enemyName = "Mantis",     respawnTime = 1200 },
+	Spider       = { spawns = { Vector3.new(-42.57848358154297, 20.0963191986084, -6.322513103485107) }, enemyName = "Spider",       respawnTime = 1800 },
+	Werewolf     = { spawns = { Vector3.new(-189.23330688476562, 68.0963134765625, -146.06748962402344) }, enemyName = "Werewolf",   respawnTime = 3600 },
+	Scorpion     = { spawns = { Vector3.new(-334, 18.305, 122) }, enemyName = "Scorpion",    respawnTime = 1200 },
 }
 
 local battleToggles = {}
-for k, _ in pairs(BATTLE_CONFIGS) do
+local killTimes     = {} -- tick() when enemy was last confirmed dead
+local timerLabels   = {} -- configKey -> label object for live countdown
+
+for k in pairs(BATTLE_CONFIGS) do
 	battleToggles[k] = false
+	killTimes[k]     = nil
 end
 
 local ORBIT_RADIUS = 25
-local ORBIT_SPEED = 5 -- radians per second
-local monstersFolder = workspace:FindFirstChild("Monsters")
+local ORBIT_SPEED  = 5
 
-local function findEnemy(name)
+local function findEnemyNearSpawn(name, spawnPos)
 	local folder = workspace:FindFirstChild("Monsters")
-	if not folder then return nil end
+	if not folder then return nil, nil end
+	local nearest, nearestPart, minDist = nil, nil, math.huge
 	for _, v in ipairs(folder:GetChildren()) do
 		if v.Name:lower():find(name:lower()) then
 			local part = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart")
-			local hum = v:FindFirstChildOfClass("Humanoid")
+			local hum  = v:FindFirstChildOfClass("Humanoid")
 			if part and hum and hum.Health > 0 then
-				return v, part
+				local dist = (part.Position - spawnPos).Magnitude
+				if dist < minDist then
+					minDist = dist
+					nearest = v
+					nearestPart = part
+				end
 			end
 		end
 	end
-	return nil
+	return nearest, nearestPart
+end
+
+local function fmtTime(s)
+	s = math.max(0, math.floor(s))
+	return string.format("%d:%02d", math.floor(s/60), s%60)
 end
 
 local function runBattle(configKey)
-	local config = BATTLE_CONFIGS[configKey]
-	local spawnIndex = 1
-	local angle = 0
-	local lastTime = tick()
+	local config         = BATTLE_CONFIGS[configKey]
+	local spawnIndex     = 1
+	local angle          = 0
+	local lastTime       = tick()
 	local enemyFoundTime = nil
+	local wasAlive       = false
+	local lastSpawnHop   = 0
+	local arrivedAt      = 0 -- when we arrived at current spawn
 
 	while running and battleToggles[configKey] do
 		local now = tick()
-		local dt = now - lastTime
-		lastTime = now
+		local dt  = now - lastTime
+		lastTime  = now
 
-		local enemy, enemyPart = findEnemy(config.enemyName)
+		local lbl = timerLabels[configKey]
+		local currentSpawn = config.spawns[spawnIndex]
+
+		-- Check global cooldown
+		local kt = killTimes[configKey]
+		if kt then
+			local remaining = config.respawnTime - (now - kt)
+			if remaining > 0 then
+				if lbl then lbl.Text = config.enemyName .. " - respawn in " .. fmtTime(remaining) end
+				task.wait(1)
+				continue
+			else
+				killTimes[configKey] = nil
+			end
+		end
+
+		local enemy, enemyPart = findEnemyNearSpawn(config.enemyName, currentSpawn)
 
 		if enemy and enemyPart then
+			wasAlive = true
+			if lbl then lbl.Text = config.enemyName .. " [" .. spawnIndex .. "/" .. #config.spawns .. "] - ALIVE" end
 			if not enemyFoundTime then
-				enemyFoundTime = tick()
+				enemyFoundTime = now
 			end
-			if tick() - enemyFoundTime < 1 then
+			if now - enemyFoundTime < 1 then
 				task.wait(0.05)
 				continue
 			end
-			-- Orbit around the enemy
 			angle = angle + ORBIT_SPEED * dt
 			local targetPos = enemyPart.Position + Vector3.new(
 				math.cos(angle) * ORBIT_RADIUS,
@@ -727,17 +741,72 @@ local function runBattle(configKey)
 			end
 		else
 			enemyFoundTime = nil
-			-- No enemy found, teleport to next spawn
-			if rootPart then
-				local spawnPos = config.spawns[spawnIndex]
-				rootPart.CFrame = CFrame.new(spawnPos + Vector3.new(0, 3, 0))
-				spawnIndex = spawnIndex % #config.spawns + 1
+			local advanceSpawn = false
+
+			if wasAlive then
+				-- Was alive, now dead — move on
+				wasAlive = false
+				advanceSpawn = true
+			elseif arrivedAt > 0 and (now - arrivedAt) >= 5 then
+				-- Been at this spawn 5 seconds, mob never showed — skip it
+				advanceSpawn = true
+			end
+
+			if advanceSpawn then
+				spawnIndex = (spawnIndex % #config.spawns) + 1
+				arrivedAt = 0
+				if spawnIndex == 1 then
+					-- Cycled all spawns, start cooldown
+					killTimes[configKey] = now
+					if lbl then lbl.Text = config.enemyName .. " - respawn in " .. fmtTime(config.respawnTime) end
+				else
+					if lbl then lbl.Text = config.enemyName .. " - moving to spawn " .. spawnIndex end
+				end
+				task.wait(1)
+				continue
+			end
+
+			-- Hop to current spawn position and wait
+			if lbl then lbl.Text = config.enemyName .. " [" .. spawnIndex .. "/" .. #config.spawns .. "] - searching..." end
+			if now - lastSpawnHop >= 3 then
+				if rootPart then
+					rootPart.CFrame = CFrame.new(currentSpawn + Vector3.new(0, 3, 0))
+					lastSpawnHop = now
+					if arrivedAt == 0 then arrivedAt = now end
+				end
 			end
 		end
 
 		task.wait(0.05)
 	end
+
+	if timerLabels[configKey] then
+		timerLabels[configKey].Text = config.enemyName .. " - OFF"
+	end
 end
+
+-- Anti-AFK: jiggle every 4 minutes to prevent idle kick
+task.spawn(function()
+	while running do
+		task.wait(240)
+		if not running then break end
+		pcall(function()
+			local VirtualUser = game:GetService("VirtualUser")
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end
+end)
+
+-- Auto-rejoin: if teleport fails, rejoin same server
+player.OnTeleport:Connect(function(state)
+	if state == Enum.TeleportState.Failed then
+		task.wait(5)
+		pcall(function()
+			TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+		end)
+	end
+end)
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/m249hh/bssultra/refs/heads/main/Library.lua"))()
 
@@ -752,13 +821,6 @@ task.spawn(function()
 	task.wait(0.2)
 	local gui = game.Players.LocalPlayer.PlayerGui:FindFirstChild("UILibrary")
 	if gui then
-		for _, v in ipairs(gui:GetDescendants()) do
-			if v:IsA("Frame") and v.Name == "MainFrame" or (v:IsA("Frame") and v.Parent == gui) then
-				v.Size = UDim2.fromOffset(375, 375)
-				break
-			end
-		end
-		-- fallback: resize first top-level Frame
 		local mainFrame = gui:FindFirstChildWhichIsA("Frame")
 		if mainFrame then
 			mainFrame.Size = UDim2.fromOffset(375, 375)
@@ -769,9 +831,7 @@ task.spawn(function()
 				v.ScrollBarThickness = 4
 			end
 		end
-		for _, v in ipairs(gui:GetDescendants()) do
-			fixScrollbar(v)
-		end
+		for _, v in ipairs(gui:GetDescendants()) do fixScrollbar(v) end
 		gui.DescendantAdded:Connect(fixScrollbar)
 	end
 end)
@@ -813,6 +873,9 @@ local function makeBattleToggle(label, configKey)
 			task.spawn(function() runBattle(configKey) end)
 		end
 	end)
+	-- Add a live timer label below each toggle
+	local lbl = TabBattle:AddLabel(BATTLE_CONFIGS[configKey].enemyName .. " - OFF")
+	timerLabels[configKey] = lbl
 end
 
 makeBattleToggle("Ladybugs", "Ladybugs")
