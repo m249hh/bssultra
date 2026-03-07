@@ -599,14 +599,12 @@ Tab1:AddToggle("Teleport Sticker Collector", false, function(state)
 	martinsugar6k.Value = state
 end)
 
-Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
-	destroyPermTokens()
+Tab1:AddToggle("Ability Tokens", false, function(state)
+	abilityTokenEnabled.Value = state
 end)
 
-local Tab4 = Window:AddTab("Ability Tokens")
-
-Tab4:AddToggle("Ability Tokens", false, function(state)
-	abilityTokenEnabled.Value = state
+Tab1:AddButton("Remove Permanent Tokens [Recommended]", function()
+	destroyPermTokens()
 end)
 
 local Tab2 = Window:AddTab("Misc")
