@@ -608,12 +608,12 @@ end)
 
 -- Battle system
 local BATTLE_CONFIGS = {
-	Ladybugs     = { spawns = { Vector3.new(-181.82994079589844, 20.096317291259766, -14.618168830871582), Vector3.new(-87.85354614257812, 4.095474720001221, 117.71167755126953), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Ladybug",     respawnTime = 300  },
-	RhinoBeetles = { spawns = { Vector3.new(154.2476348876953, 4.095475196838379, 96.91366577148438), Vector3.new(135.10894775390625, 20.0963191986084, -28.017919540405273), Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Rhino Beetle", respawnTime = 300  },
-	Mantises     = { spawns = { Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(-331.1097717285156, 68.0963134765625, -189.36790466308594) }, enemyName = "Mantis",     respawnTime = 1200 },
-	Spider       = { spawns = { Vector3.new(-42.57848358154297, 20.0963191986084, -6.322513103485107) }, enemyName = "Spider",       respawnTime = 1800 },
-	Werewolf     = { spawns = { Vector3.new(-189.23330688476562, 68.0963134765625, -146.06748962402344) }, enemyName = "Werewolf",   respawnTime = 3600 },
-	Scorpion     = { spawns = { Vector3.new(-334, 18.305, 122) }, enemyName = "Scorpion",    respawnTime = 1200 },
+	Ladybugs     = { spawns = { Vector3.new(-181.82994079589844, 20.096317291259766, -14.618168830871582), Vector3.new(-87.85354614257812, 4.095474720001221, 117.71167755126953), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Ladybug",     respawnTime = 330  },
+	RhinoBeetles = { spawns = { Vector3.new(154.2476348876953, 4.095475196838379, 96.91366577148438), Vector3.new(135.10894775390625, 20.0963191986084, -28.017919540405273), Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(153.90097045898438, 33.5963134765625, 194.73695373535156) }, enemyName = "Rhino Beetle", respawnTime = 330  },
+	Mantises     = { spawns = { Vector3.new(257.78680419921875, 68.0963134765625, -205.44471740722656), Vector3.new(-331.1097717285156, 68.0963134765625, -189.36790466308594) }, enemyName = "Mantis",     respawnTime = 1230, orbitRadius = 35 },
+	Spider       = { spawns = { Vector3.new(-42.57848358154297, 20.0963191986084, -6.322513103485107) }, enemyName = "Spider",       respawnTime = 1830, orbitRadius = 35 },
+	Werewolf     = { spawns = { Vector3.new(-189.23330688476562, 68.0963134765625, -146.06748962402344) }, enemyName = "Werewolf",   respawnTime = 3630 },
+	Scorpion     = { spawns = { Vector3.new(-334, 18.305, 122) }, enemyName = "Scorpion",    respawnTime = 1230, orbitRadius = 35 },
 }
 
 local battleToggles = {}
@@ -626,18 +626,19 @@ for k in pairs(BATTLE_CONFIGS) do
 end
 
 local ORBIT_RADIUS = 25
-local ORBIT_SPEED  = 5
+local ORBIT_SPEED  = 2.5
 
 local function findEnemyNearSpawn(name, spawnPos)
 	local folder = workspace:FindFirstChild("Monsters")
 	if not folder then return nil, nil end
 	local nearest, nearestPart, minDist = nil, nil, math.huge
+	local checkPos = (rootPart and rootPart.Position) or spawnPos
 	for _, v in ipairs(folder:GetChildren()) do
 		if v.Name:lower():find(name:lower()) then
 			local part = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart")
 			local hum  = v:FindFirstChildOfClass("Humanoid")
 			if part and hum and hum.Health > 0 then
-				local dist = (part.Position - spawnPos).Magnitude
+				local dist = (part.Position - checkPos).Magnitude
 				if dist < minDist then
 					minDist = dist
 					nearest = v
@@ -698,10 +699,11 @@ local function runBattle(configKey)
 				continue
 			end
 			angle = angle + ORBIT_SPEED * dt
+			local radius = config.orbitRadius or ORBIT_RADIUS
 			local targetPos = enemyPart.Position + Vector3.new(
-				math.cos(angle) * ORBIT_RADIUS,
+				math.cos(angle) * radius,
 				3,
-				math.sin(angle) * ORBIT_RADIUS
+				math.sin(angle) * radius
 			)
 			if rootPart then
 				rootPart.CFrame = CFrame.new(targetPos, enemyPart.Position)
@@ -879,6 +881,28 @@ Tab2:AddButton("Load Infinite Yield", function()
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
 end)
 
+Tab2:AddButton("Server Hop", function()
+	local HttpService = game:GetService("HttpService")
+	local foundServer = false
+	pcall(function()
+		local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+		local data = HttpService:JSONDecode(game:HttpGet(url))
+		if data and data.data then
+			for _, server in ipairs(data.data) do
+				if server.id ~= game.JobId and server.playing and server.maxPlayers and server.playing < server.maxPlayers then
+					foundServer = true
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+					break
+				end
+			end
+		end
+	end)
+	if not foundServer then
+		-- No other server found, just rejoin
+		TeleportService:Teleport(game.PlaceId, player)
+	end
+end)
+
 local Tab3 = Window:AddTab("Status")
 
 Tab3:AddLabel("Made By m249")
@@ -888,32 +912,45 @@ local sproutLabel = Tab3:AddLabel("🌱 Sticker Sprout: fetching...")
 
 -- Fetch sprout timer from Firebase and update label
 local SPROUT_INTERVAL = 3 * 3600 -- 3 hours in seconds
+local sproutAnchorMs = nil
+local lastFetch = 0
+
+local function updateSproutLabel()
+	if not sproutAnchorMs then
+		sproutLabel.Text = "🌱 Sticker Sprout: no sync yet"
+		return
+	end
+	local nowMs = os.time() * 1000
+	local diff = sproutAnchorMs - nowMs
+	while diff < 0 do
+		diff = diff + SPROUT_INTERVAL * 1000
+	end
+	local totalSecs = math.floor(diff / 1000)
+	if totalSecs <= 0 then
+		sproutLabel.Text = "🌱 Sticker Sprout: LIVE NOW!"
+	else
+		local h = math.floor(totalSecs / 3600)
+		local m = math.floor((totalSecs % 3600) / 60)
+		local s = totalSecs % 60
+		sproutLabel.Text = string.format("🌱 Sticker Sprout: %d:%02d:%02d", h, m, s)
+	end
+end
+
 local function fetchSproutTimer()
 	task.spawn(function()
 		while running do
-			pcall(function()
-				local json = game:HttpGet("https://bss-stricker-sprout-timer-default-rtdb.firebaseio.com//anchor.json")
-				local anchorMs = tonumber(json)
-				if anchorMs then
-					local nowMs = os.time() * 1000
-					local diff = anchorMs - nowMs
-					-- Find next spawn
-					while diff < 0 do
-						diff = diff + SPROUT_INTERVAL * 1000
+			local now = os.time()
+			if now - lastFetch >= 30 then
+				pcall(function()
+					local json = game:HttpGet("https://bss-stricker-sprout-timer-default-rtdb.firebaseio.com//anchor.json")
+					local val = tonumber(json)
+					if val then
+						sproutAnchorMs = val
+						lastFetch = now
 					end
-					local totalSecs = math.floor(diff / 1000)
-					local h = math.floor(totalSecs / 3600)
-					local m = math.floor((totalSecs % 3600) / 60)
-					local s = totalSecs % 60
-					if totalSecs <= 0 then
-						sproutLabel.Text = "🌱 Sticker Sprout: LIVE NOW!"
-					else
-						sproutLabel.Text = string.format("🌱 Sticker Sprout: %d:%02d:%02d", h, m, s)
-					end
-				else
-					sproutLabel.Text = "🌱 Sticker Sprout: no sync yet"
-				end
-			end)
+				end)
+			end
+			updateSproutLabel()
 			task.wait(1)
 		end
 	end)
