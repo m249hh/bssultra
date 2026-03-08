@@ -589,54 +589,21 @@ task.spawn(function()
 	end
 end)
 
-local function FindNearestPetal()
-	local nearest, minDist = nil, math.huge
-	local rpPos = rootPart.Position
-	-- Check direct children first (BaseParts named PetalPart)
-	-- Also check inside Models for a PetalPart BasePart
-	local function checkPart(v)
-		if v:IsA("BasePart") and v.Name == "PetalPart" then
-			if not v:FindFirstChild("isTouched") and not v:FindFirstChild("Collected") then
-				local dist = (rpPos - v.Position).Magnitude
-				if dist < minDist then
-					minDist = dist
-					nearest = v
-				end
-			end
-		end
-	end
-	for _, v in ipairs(particlesFolder:GetChildren()) do
-		if v:IsA("BasePart") then
-			checkPart(v)
-		elseif v:IsA("Model") then
-			for _, child in ipairs(v:GetDescendants()) do
-				checkPart(child)
-			end
-		end
-	end
-	return nearest
-end
-
 local function TeleportToPetal(petal)
-	if not petal or not rootPart then return end
+	if not petal or not petal.Parent or not rootPart then return end
 	if humanoid and humanoid.Health <= 0 then return end
-	-- Use the actual BasePart position, not any model center
-	local pos = petal.Position
-	rootPart.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+	if petal:FindFirstChild("Collected") then return end
 	local tag = Instance.new("BoolValue")
 	tag.Name = "Collected"
 	tag.Parent = petal
+	rootPart.CFrame = CFrame.new(petal.Position + Vector3.new(0, 3, 0))
 end
 
-task.spawn(function()
-	while running and task.wait(0.05) do
-		if bloomCollectorEnabled.Value and rootPart then
-			local petal = FindNearestPetal()
-			if petal then
-				pcall(function() TeleportToPetal(petal) end)
-			end
-		end
-	end
+particlesFolder.ChildAdded:Connect(function(v)
+	if not bloomCollectorEnabled.Value then return end
+	if v.Name ~= "PetalPart" then return end
+	task.wait(0.5)
+	pcall(function() TeleportToPetal(v) end)
 end)
 
 -- Battle system
