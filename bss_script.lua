@@ -879,5 +879,65 @@ Tab2:AddButton("Load Infinite Yield", function()
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
 end)
 
-local Tab3 = Window:AddTab("Info")
+local Tab3 = Window:AddTab("Status")
+
 Tab3:AddLabel("Made By m249")
+Tab3:AddLabel("────────────────────")
+
+local sproutLabel = Tab3:AddLabel("🌱 Sticker Sprout: fetching...")
+
+-- Fetch sprout timer from Firebase and update label
+local SPROUT_INTERVAL = 3 * 3600 -- 3 hours in seconds
+local function fetchSproutTimer()
+	task.spawn(function()
+		while running do
+			pcall(function()
+				local json = game:HttpGet("https://bss-stricker-sprout-timer-default-rtdb.firebaseio.com//anchor.json")
+				local anchorMs = tonumber(json)
+				if anchorMs then
+					local nowMs = os.time() * 1000
+					local diff = anchorMs - nowMs
+					-- Find next spawn
+					while diff < 0 do
+						diff = diff + SPROUT_INTERVAL * 1000
+					end
+					local totalSecs = math.floor(diff / 1000)
+					local h = math.floor(totalSecs / 3600)
+					local m = math.floor((totalSecs % 3600) / 60)
+					local s = totalSecs % 60
+					if totalSecs <= 0 then
+						sproutLabel.Text = "🌱 Sticker Sprout: LIVE NOW!"
+					else
+						sproutLabel.Text = string.format("🌱 Sticker Sprout: %d:%02d:%02d", h, m, s)
+					end
+				else
+					sproutLabel.Text = "🌱 Sticker Sprout: no sync yet"
+				end
+			end)
+			task.wait(1)
+		end
+	end)
+end
+fetchSproutTimer()
+
+Tab3:AddLabel("────────────────────")
+
+-- Battle timers will be added here after TabBattle is created
+-- (timerLabels table is populated in the battle tab section above)
+-- Add a live-updating status label for each battle
+local battleStatusLabels = {}
+for k, config in pairs(BATTLE_CONFIGS) do
+	battleStatusLabels[k] = Tab3:AddLabel(config.enemyName .. " - OFF")
+end
+
+-- Keep status tab labels in sync with battle labels
+task.spawn(function()
+	while running do
+		for k, config in pairs(BATTLE_CONFIGS) do
+			if timerLabels[k] and battleStatusLabels[k] then
+				battleStatusLabels[k].Text = timerLabels[k].Text
+			end
+		end
+		task.wait(1)
+	end
+end)
